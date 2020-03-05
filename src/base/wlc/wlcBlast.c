@@ -718,6 +718,20 @@ void Wlc_BlastTable( Gia_Man_t * pNew, word * pTable, int * pFans, int nFans, in
     Vec_IntFree( vMemory );
     ABC_FREE( pTruth );
 }
+void Wlc_BlastLut( Gia_Man_t * pNew, word Truth, int * pFans, int nFans, int nOuts, Vec_Int_t * vRes )
+{
+    extern int Kit_TruthToGia( Gia_Man_t * pMan, unsigned * pTruth, int nVars, Vec_Int_t * vMemory, Vec_Int_t * vLeaves, int fHash );
+    Vec_Int_t * vMemory = Vec_IntAlloc( 0 );
+    Vec_Int_t vLeaves = { nFans, nFans, pFans };
+    int iLit;
+    Vec_IntClear( vRes );
+    assert( nOuts == 1 );
+    if ( nFans < 6 )
+        Truth = Abc_Tt6Stretch( Truth, nFans );
+    iLit = Kit_TruthToGia( pNew, (unsigned *)&Truth, nFans, vMemory, &vLeaves, 1 );
+    Vec_IntPush( vRes, iLit );
+    Vec_IntFree( vMemory );
+}
 void Wlc_BlastPower( Gia_Man_t * pNew, int * pNum, int nNum, int * pExp, int nExp, Vec_Int_t * vTemp, Vec_Int_t * vRes )
 {
     Vec_Int_t * vDegrees = Vec_IntAlloc( 2*nNum );
@@ -773,6 +787,35 @@ void Wlc_BlastSqrt( Gia_Man_t * pNew, int * pNum, int nNum, Vec_Int_t * vTmp, Ve
     }
     Vec_IntReverseOrder( vRes );
 }
+void Wlc_BlastSqrtNR( Gia_Man_t * pNew, int * pNum, int nNum, Vec_Int_t * vTmp, Vec_Int_t * vRes )
+{
+    int * pSqr, * pRem, * pIn1;
+    int i, k, Carry = 1;
+    assert( nNum % 2 == 0 );
+    Vec_IntFill( vRes, nNum/2, 0 );
+    Vec_IntFill( vTmp, 2*nNum, 0 );
+    pSqr = Vec_IntArray( vRes );
+    pRem = Vec_IntArray( vTmp );
+    pIn1 = pRem + nNum;
+    for ( i = 0; i < nNum/2; i++ )
+    {
+        int SqrPrev = Carry;
+        assert( pIn1[0] == 0 );
+        for ( k = 1; k < i; k++ )
+            pIn1[k] = 0;
+        for ( k = i; k < 2*i; k++ )
+            pIn1[k] = pSqr[k-i];
+        pIn1[k++] = Abc_LitNot(Carry);
+        pIn1[k++] = 1;
+        assert( k == 2*i+2 );
+        pRem[2*i+0] = pNum[nNum-2*i-1];
+        pRem[2*i+1] = pNum[nNum-2*i-2];
+        for ( k = 2*i+1; k >= 0; k-- )
+            Wlc_BlastFullAdder( pNew, Gia_ManHashXor(pNew, SqrPrev, pIn1[k]), pRem[k], Carry, &Carry, &pRem[k] );
+        pSqr[i] = Carry;
+    }
+    Vec_IntReverseOrder( vRes );
+}
 void Wlc_IntInsert( Vec_Int_t * vProd, Vec_Int_t * vLevel, int Node, int Level )
 {
     int i;
@@ -782,9 +825,8 @@ void Wlc_IntInsert( Vec_Int_t * vProd, Vec_Int_t * vLevel, int Node, int Level )
     Vec_IntInsert( vProd,  i + 1, Node  );
     Vec_IntInsert( vLevel, i + 1, Level );
 }
-void Wlc_BlastPrintMatrix( Gia_Man_t * p, Vec_Wec_t * vProds )
+void Wlc_BlastPrintMatrix( Gia_Man_t * p, Vec_Wec_t * vProds, int fVerbose )
 {
-    int fVerbose = 0;
     Vec_Int_t * vSupp = Vec_IntAlloc( 100 );
     Vec_Wrd_t * vTemp = Vec_WrdStart( Gia_ManObjNum(p) );
     Vec_Int_t * vLevel;  word Truth;
@@ -1051,16 +1093,19 @@ void Wlc_BlastBooth( Gia_Man_t * pNew, int * pArgA, int * pArgB, int nArgA, int 
     int FillA = fSigned ? pArgA[nArgA-1] : 0;
     int FillB = fSigned ? pArgB[nArgB-1] : 0;
     int i, k, Sign;
-    // create new arguments
-    Vec_Int_t * vArgB = Vec_IntAlloc( nArgB + 3 );
+
+    // extend argument B
+    Vec_Int_t * vArgB = Vec_IntAlloc( nArgB + 2 );
     Vec_IntPush( vArgB, 0 );
     for ( i = 0; i < nArgB; i++ )
         Vec_IntPush( vArgB, pArgB[i] );
-    Vec_IntPush( vArgB, FillB );
+    if ( !fSigned )
+        Vec_IntPushTwo( vArgB, FillB, FillB );
     if ( Vec_IntSize(vArgB) % 2 == 0 )
         Vec_IntPush( vArgB, FillB );
     assert( Vec_IntSize(vArgB) % 2 == 1 );
-    // iterate through bit-pairs
+
+    // iterate through bit-pairs of B
     for ( k = 0; k+2 < Vec_IntSize(vArgB); k+=2 )
     {
         int pp    = -1;
@@ -1077,12 +1122,13 @@ void Wlc_BlastBooth( Gia_Man_t * pNew, int * pArgA, int * pArgB, int nArgA, int 
             int Part = Gia_ManHashOr( pNew, Gia_ManHashAnd(pNew, One, This), Gia_ManHashAnd(pNew, Two, Prev) );
             
             pp = Gia_ManHashXor( pNew, Part, Neg );
-
-            if ( pp == 0 )
+            if ( pp == 0 || (fSigned && i == nArgA) )
                 continue;
+
             Vec_WecPush( vProds,  k+i, pp );
             Vec_WecPush( vLevels, k+i, 0 );
         }
+        if ( fSigned ) i--;
         // perform sign extension
         Sign = fSigned ? pp : Neg;
         if ( k == 0 )
@@ -1096,7 +1142,7 @@ void Wlc_BlastBooth( Gia_Man_t * pNew, int * pArgA, int * pArgB, int nArgA, int 
             Vec_WecPush( vProds,  k+i+2, Abc_LitNot(Sign) );
             Vec_WecPush( vLevels, k+i+2, 0 );
         }
-        else
+        else 
         {
             Vec_WecPush( vProds,  k+i, Abc_LitNot(Sign) );
             Vec_WecPush( vLevels, k+i, 0 );
@@ -1111,7 +1157,7 @@ void Wlc_BlastBooth( Gia_Man_t * pNew, int * pArgA, int * pArgB, int nArgA, int 
         Vec_WecPush( vLevels, k, 0 );
     }
     //Vec_WecPrint( vProds, 0 );
-    //Wlc_BlastPrintMatrix( pNew, vProds );
+    //Wlc_BlastPrintMatrix( pNew, vProds, 1 );
     //printf( "Cutoff ID for partial products = %d.\n", Gia_ManObjNum(pNew) );
     Wlc_BlastReduceMatrix( pNew, vProds, vLevels, vRes, fSigned, fCla );
 //    Wlc_BlastReduceMatrix2( pNew, vProds, vRes, fSigned, fCla );
@@ -1791,7 +1837,10 @@ Gia_Man_t * Wlc_NtkBitBlast( Wlc_Ntk_t * p, Wlc_BstPar_t * pParIn )
         {
             int * pArg0 = Wlc_VecLoadFanins( vTemp0, pFans0, nRange0, nRange0 + (nRange0 & 1), 0 );
             nRange0 += (nRange0 & 1);
-            Wlc_BlastSqrt( pNew, pArg0, nRange0, vTemp2, vRes );
+            if ( pPar->fNonRest )
+                Wlc_BlastSqrtNR( pNew, pArg0, nRange0, vTemp2, vRes );
+            else
+                Wlc_BlastSqrt( pNew, pArg0, nRange0, vTemp2, vRes );
             if ( nRange > Vec_IntSize(vRes) )
                 Vec_IntFillExtra( vRes, nRange, 0 );
             else
@@ -1817,6 +1866,8 @@ Gia_Man_t * Wlc_NtkBitBlast( Wlc_Ntk_t * p, Wlc_BstPar_t * pParIn )
         }
         else if ( pObj->Type == WLC_OBJ_TABLE )
             Wlc_BlastTable( pNew, Wlc_ObjTable(p, pObj), pFans0, nRange0, nRange, vRes );
+        else if ( pObj->Type == WLC_OBJ_LUT && p->vLutTruths )
+            Wlc_BlastLut( pNew, Vec_WrdEntry(p->vLutTruths, Wlc_ObjId(p, pObj)), pFans0, nRange0, nRange, vRes );
         else assert( 0 );
         assert( Vec_IntSize(vBits) == Wlc_ObjCopy(p, i) );
         Vec_IntAppend( vBits, vRes );

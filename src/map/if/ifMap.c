@@ -217,7 +217,7 @@ void If_ObjPerformMappingAnd( If_Man_t * p, If_Obj_t * pObj, int Mode, int fPrep
         assert( pCut->Delay != -1 );
 //        assert( pCut->Delay <= pObj->Required + p->fEpsilon );
         if ( pCut->Delay > pObj->Required + 2*p->fEpsilon )
-            Abc_Print( 1, "If_ObjPerformMappingAnd(): Warning! Delay of node %d (%f) exceeds the required times (%f).\n", 
+            Abc_Print( 1, "If_ObjPerformMappingAnd(): Warning! Node with ID %d has delay (%f) exceeding the required times (%f).\n", 
                 pObj->Id, pCut->Delay, pObj->Required + p->fEpsilon );
         pCut->Area = (Mode == 2)? If_CutAreaDerefed( p, pCut ) : If_CutAreaFlow( p, pCut );
         if ( p->pPars->fEdge )
@@ -291,6 +291,8 @@ void If_ObjPerformMappingAnd( If_Man_t * p, If_Obj_t * pObj, int Mode, int fPrep
             if ( p->pPars->fVerbose )
                 p->timeCache[4] += Abc_Clock() - clk;
             if ( !p->pPars->fSkipCutFilter && fChange && If_CutFilter( pCutSet, pCut, fSave0 ) )
+                continue;
+            if ( p->pPars->fLut6Filter && pCut->nLeaves == 6 && !If_CutCheckTruth6(p, pCut) )
                 continue;
             if ( p->pPars->fUseDsd )
             {
@@ -631,6 +633,8 @@ int If_ManPerformMappingRound( If_Man_t * p, int nCutsUsed, int Mode, int fPrepr
             }
             else if ( If_ObjIsConst1(pObj) )
             {
+                arrTime = -IF_INFINITY;
+                If_ObjSetArrTime( pObj, arrTime );
             }
             else
                 assert( 0 );

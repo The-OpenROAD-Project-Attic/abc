@@ -148,11 +148,23 @@ int Wln_RetComputeFfClasses( Wln_Ntk_t * pNtk, Vec_Int_t * vClasses )
 }
 Wln_Ret_t * Wln_RetAlloc( Wln_Ntk_t * pNtk )
 {
-    Wln_Ret_t * p; int k, iObj, iFanin;
+    Wln_Ret_t * p; int k, iObj, iFanin, fFirst = 1;
     Vec_Int_t * vRefsCopy = Vec_IntAlloc(0);
     p = ABC_CALLOC( Wln_Ret_t, 1 );
     p->pNtk = pNtk;
     Wln_NtkCreateRefs( pNtk );
+    // print objects without fanout
+    Wln_NtkForEachObj( pNtk, iObj )
+        if ( Wln_ObjRefs(pNtk, iObj) == 0 && !Wln_ObjIsCio(pNtk, iObj) )
+        {
+            if ( fFirst )
+            {
+                fFirst = 0;
+                printf( "Objects without fanout:\n" );
+            }
+            Wln_ObjPrint(pNtk, iObj);
+        }
+    // start fanin/fanout maps
     Wln_NtkStartFaninMap( pNtk, &p->vFanins, 2 );
     Wln_NtkStartFanoutMap( pNtk, &p->vFanouts, &pNtk->vRefs, 2 );
     ABC_SWAP( Vec_Int_t, *vRefsCopy, pNtk->vRefs );
@@ -372,6 +384,8 @@ int Wln_RetCheckForward( Wln_Ret_t * p, Vec_Int_t * vSet )
 static inline int Wln_RetCheckBackwardOne( Wln_Ret_t * p, int iObj )
 {
     int k, iFanin, * pLink, iFlop, Class = -1;
+    if ( Wln_ObjRefs(p->pNtk, iObj) == 0 )
+        return 0;
     Wln_RetForEachFanout( p, iObj, iFanin, pLink, k )
     {
         if ( !pLink[0] )
@@ -462,7 +476,7 @@ void Wln_RetInsertOneFanout( Wln_Ret_t * p, int iObj, int iFlop )
     {
         if ( pLink[0] )
             pLink = Wln_RetHeadToTail( p, pLink );
-        assert( pLink[0] == 0 );
+        //assert( pLink[0] == 0 );
         pLink[0] = Vec_IntSize(&p->vEdgeLinks);
         Vec_IntPushTwo( &p->vEdgeLinks, 0, iFlop );
     }
@@ -485,7 +499,7 @@ void Wln_RetRetimeBackward( Wln_Ret_t * p, Vec_Int_t * vSet )
         Wln_RetInsertOneFanin( p, iObj, iFlop );
     }
 }
-void Wln_RetAddToMoves( Wln_Ret_t * p, Vec_Int_t * vSet, int Delay, int fForward, int nMoves, int fVerbose )
+void Wln_RetAddToMoves( Wln_Ret_t * p, Vec_Int_t * vSet, int Delay, int fForward, int nMoves, int fSkipSimple, int fVerbose )
 {
     int i, iObj;
     if ( vSet == NULL )
@@ -499,6 +513,8 @@ void Wln_RetAddToMoves( Wln_Ret_t * p, Vec_Int_t * vSet, int Delay, int fForward
     Vec_IntForEachEntry( vSet, iObj, i )
     {
         int NameId = Vec_IntEntry( &p->pNtk->vNameIds, iObj );
+        if ( fSkipSimple && (Wln_ObjIsFf(p->pNtk, iObj) || Wln_ObjType(p->pNtk, iObj) == ABC_OPER_SLICE || Wln_ObjType(p->pNtk, iObj) == ABC_OPER_CONCAT) )
+            continue;
         Vec_IntPush( &p->vMoves, fForward ? -NameId : NameId );
         if ( fVerbose )
             printf( " %d (NameID = %d)  ", fForward ? -iObj : iObj, fForward ? -NameId : NameId );
@@ -546,7 +562,7 @@ void Wln_NtkRetimeCreateDelayInfo( Wln_Ntk_t * pNtk )
         printf( "Assuming default delays: 10 units for most nodes and 1 unit for bit-slice, concat, and buffers driving COs.\n" );
     }
 }
-Vec_Int_t * Wln_NtkRetime( Wln_Ntk_t * pNtk, int fVerbose )
+Vec_Int_t * Wln_NtkRetime( Wln_Ntk_t * pNtk, int fSkipSimple, int fVerbose )
 {
     Wln_Ret_t * p = Wln_RetAlloc( pNtk );
     Vec_Int_t * vSources = &p->vSources;
@@ -559,7 +575,7 @@ Vec_Int_t * Wln_NtkRetime( Wln_Ntk_t * pNtk, int fVerbose )
     Wln_RetMarkChanges( p, NULL );
     p->DelayMax = DelayInit = DelayBest = Wln_RetPropDelay( p );
     Wln_RetFindSources( p );
-    Wln_RetAddToMoves( p, NULL, p->DelayMax, 0, nMoves, fVerbose );
+    Wln_RetAddToMoves( p, NULL, p->DelayMax, 0, nMoves, fSkipSimple, fVerbose );
     while ( Vec_IntSize(vSources) || Vec_IntSize(vSinks) )
     {
         int DelayMaxPrev = p->DelayMax;
@@ -602,7 +618,7 @@ Vec_Int_t * Wln_NtkRetime( Wln_Ntk_t * pNtk, int fVerbose )
         //Wln_RetPrint( p );
         if ( fVerbose )
             printf( "\n" );
-        Wln_RetAddToMoves( p, vFront, p->DelayMax, fForward, nMoves, fVerbose );
+        Wln_RetAddToMoves( p, vFront, p->DelayMax, fForward, nMoves, fSkipSimple, fVerbose );
         if ( fVerbose )
         {
             printf( "Sinks: " );

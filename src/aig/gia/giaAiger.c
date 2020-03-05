@@ -794,19 +794,26 @@ Gia_Man_t * Gia_AigerReadFromMemory( char * pContents, int nFileSize, int fGiaSi
     if ( !fGiaSimple && !fSkipStrash && Gia_ManHasDangling(pNew) )
     {
         Tim_Man_t * pManTime;
-        Vec_Int_t * vFlopMap, * vGateMap, * vObjMap;
-        vFlopMap = pNew->vFlopClasses; pNew->vFlopClasses = NULL;
-        vGateMap = pNew->vGateClasses; pNew->vGateClasses = NULL;
-        vObjMap  = pNew->vObjClasses;  pNew->vObjClasses  = NULL;
-        pManTime = (Tim_Man_t *)pNew->pManTime; pNew->pManTime     = NULL;
+        Gia_Man_t * pAigExtra;
+        Vec_Int_t * vFlopMap, * vGateMap, * vObjMap, * vRegClasses, * vRegInits;
+        vRegClasses = pNew->vRegClasses;  pNew->vRegClasses    = NULL;
+        vRegInits   = pNew->vRegInits;    pNew->vRegInits      = NULL;
+        vFlopMap    = pNew->vFlopClasses; pNew->vFlopClasses   = NULL;
+        vGateMap    = pNew->vGateClasses; pNew->vGateClasses   = NULL;
+        vObjMap     = pNew->vObjClasses;  pNew->vObjClasses    = NULL;
+        pManTime = (Tim_Man_t *)pNew->pManTime; pNew->pManTime = NULL;
+        pAigExtra   = pNew->pAigExtra;    pNew->pAigExtra      = NULL;
         pNew = Gia_ManCleanup( pTemp = pNew );
         if ( (vGateMap || vObjMap) && (Gia_ManObjNum(pNew) < Gia_ManObjNum(pTemp)) )
             printf( "Cleanup removed objects after reading. Old gate/object abstraction maps are invalid!\n" );
         Gia_ManStop( pTemp );
+        pNew->vRegClasses  = vRegClasses;
+        pNew->vRegInits    = vRegInits;
         pNew->vFlopClasses = vFlopMap;
         pNew->vGateClasses = vGateMap;
         pNew->vObjClasses  = vObjMap;
         pNew->pManTime     = pManTime;
+        pNew->pAigExtra    = pAigExtra;
     }
 
     if ( fHieOnly )
@@ -1110,9 +1117,7 @@ void Gia_AigerWrite( Gia_Man_t * pInit, char * pFileName, int fWriteSymbols, int
         Gia_ManTransferMapping( p, pInit );
         Gia_ManTransferPacking( p, pInit );
         Gia_ManTransferTiming( p, pInit );
-        p->vNamesIn   = pInit->vNamesIn;   pInit->vNamesIn   = NULL;
-        p->vNamesOut  = pInit->vNamesOut;  pInit->vNamesOut  = NULL;
-        p->nConstrs   = pInit->nConstrs;   pInit->nConstrs   = 0;
+        p->nConstrs   = pInit->nConstrs;
     }
     else
         p = pInit;
@@ -1415,9 +1420,7 @@ void Gia_AigerWrite( Gia_Man_t * pInit, char * pFileName, int fWriteSymbols, int
     fclose( pFile );
     if ( p != pInit )
     {
-        pInit->pManTime  = p->pManTime;  p->pManTime = NULL;
-        pInit->vNamesIn  = p->vNamesIn;  p->vNamesIn = NULL;
-        pInit->vNamesOut = p->vNamesOut; p->vNamesOut = NULL;
+        Gia_ManTransferTiming( pInit, p );
         Gia_ManStop( p );
     }
 }

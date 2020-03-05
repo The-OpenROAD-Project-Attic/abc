@@ -936,6 +936,51 @@ Gia_Man_t * Gia_ManDupPermFlopGap( Gia_Man_t * p, Vec_Int_t * vFfMask )
   SeeAlso     []
 
 ***********************************************************************/
+Gia_Man_t * Gia_ManDupPiPerm( Gia_Man_t * p )
+{
+    Gia_Man_t * pNew, * pOne;
+    Gia_Obj_t * pObj;
+    int i;
+    Gia_ManRandom(1);
+    pNew = Gia_ManStart( Gia_ManObjNum(p) );
+    pNew->pName = Abc_UtilStrsav( p->pName );
+    pNew->pSpec = Abc_UtilStrsav( p->pSpec );
+    Gia_ManHashAlloc( pNew );
+    Gia_ManConst0(p)->Value = 0;
+    Gia_ManForEachCi( p, pObj, i )
+        pObj->Value = Gia_ManAppendCi( pNew );
+    Gia_ManForEachAnd( p, pObj, i )
+    {
+        int iLit0 = Gia_ObjFanin0Copy(pObj);
+        int iLit1 = Gia_ObjFanin1Copy(pObj);
+        int iPlace0 = Gia_ManRandom(0) % Gia_ManCiNum(p);
+        int iPlace1 = Gia_ManRandom(0) % Gia_ManCiNum(p);
+        if ( Abc_Lit2Var(iLit0) <= Gia_ManCiNum(p) )
+            iLit0 = Abc_Var2Lit( iPlace0+1, Abc_LitIsCompl(iLit0) );
+        if ( Abc_Lit2Var(iLit1) <= Gia_ManCiNum(p) )
+            iLit1 = Abc_Var2Lit( iPlace1+1, Abc_LitIsCompl(iLit1) );
+        pObj->Value = Gia_ManHashAnd( pNew, iLit0, iLit1 );
+    }
+    Gia_ManForEachCo( p, pObj, i )
+        pObj->Value = Gia_ManAppendCo( pNew, Gia_ObjFanin0Copy(pObj) );
+    Gia_ManHashStop( pNew );
+    Gia_ManSetRegNum( pNew, Gia_ManRegNum(p) );
+    pNew = Gia_ManCleanup( pOne = pNew );
+    Gia_ManStop( pOne );
+    return pNew;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Appends second AIG without any changes.]
+
+  Description []
+               
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
 void Gia_ManDupAppend( Gia_Man_t * pNew, Gia_Man_t * pTwo )
 {
     Gia_Obj_t * pObj;
@@ -1509,6 +1554,30 @@ Gia_Man_t * Gia_ManDupDfs( Gia_Man_t * p )
     pNew->nConstrs = p->nConstrs;
     if ( p->pCexSeq )
         pNew->pCexSeq = Abc_CexDup( p->pCexSeq, Gia_ManRegNum(p) );
+    return pNew;
+}
+Gia_Man_t * Gia_ManDupDfsOnePo( Gia_Man_t * p, int iPo )
+{
+    Gia_Man_t * pNew, * pTemp;
+    Gia_Obj_t * pObj;
+    int i;
+    assert( iPo >= 0 && iPo < Gia_ManPoNum(p) );
+    pNew = Gia_ManStart( Gia_ManObjNum(p) );
+    pNew->pName = Abc_UtilStrsav( p->pName );
+    pNew->pSpec = Abc_UtilStrsav( p->pSpec );
+    Gia_ManFillValue( p );
+    Gia_ManConst0(p)->Value = 0;
+    Gia_ManForEachCi( p, pObj, i )
+        pObj->Value = Gia_ManAppendCi(pNew);
+    Gia_ManForEachCo( p, pObj, i )
+        if ( !Gia_ObjIsPo(p, pObj) || i == iPo )
+            Gia_ManDupDfs_rec( pNew, p, Gia_ObjFanin0(pObj) );
+    Gia_ManForEachCo( p, pObj, i )
+        if ( !Gia_ObjIsPo(p, pObj) || i == iPo )
+            pObj->Value = Gia_ManAppendCo( pNew, Gia_ObjFanin0Copy(pObj) );
+    Gia_ManSetRegNum( pNew, Gia_ManRegNum(p) );
+    pNew = Gia_ManCleanup( pTemp = pNew );
+    Gia_ManStop( pTemp );
     return pNew;
 }
 
@@ -4766,6 +4835,62 @@ Gia_Man_t * Gia_ManScorrDivideTest( Gia_Man_t * p, Cec_ParCor_t * pPars )
     pNew = Gia_ManCorrReduce( p );
     pNew = Gia_ManSeqCleanup( pTemp = pNew );
     Gia_ManStop( pTemp );
+    return pNew;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Duplicate AIG by creating a cut between logic fed by PIs]
+
+  Description []
+               
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
+void Gia_ManHighLightFlopLogic( Gia_Man_t * p )
+{
+    Gia_Obj_t * pObj; int i;
+    Gia_ManForEachPi( p, pObj, i )
+        pObj->fMark0 = 0;
+    Gia_ManForEachRo( p, pObj, i )
+        pObj->fMark0 = 1;
+    Gia_ManForEachAnd( p, pObj, i )
+        pObj->fMark0 = Gia_ObjFanin0(pObj)->fMark0 | Gia_ObjFanin1(pObj)->fMark0;
+    Gia_ManForEachCo( p, pObj, i )
+        pObj->fMark0 = Gia_ObjFanin0(pObj)->fMark0;
+}
+Gia_Man_t * Gia_ManDupReplaceCut( Gia_Man_t * p )
+{
+    Gia_Man_t * pNew;  int i;
+    Gia_Obj_t * pObj, * pFanin;
+    Gia_ManHighLightFlopLogic( p );
+    pNew = Gia_ManStart( Gia_ManObjNum(p) );
+    pNew->pName = Abc_UtilStrsav( p->pName );
+    pNew->pSpec = Abc_UtilStrsav( p->pSpec );
+    // create PIs for nodes pointed to from above the cut
+    Gia_ManFillValue( p );
+    Gia_ManConst0(p)->Value = 0;
+    Gia_ManForEachAnd( p, pObj, i )
+    {
+        if ( !pObj->fMark0 )
+            continue;
+        pFanin = Gia_ObjFanin0(pObj);
+        if ( !pFanin->fMark0 && !~pFanin->Value )
+            pFanin->Value = Gia_ManAppendCi(pNew);
+        pFanin = Gia_ObjFanin1(pObj);
+        if ( !pFanin->fMark0 && !~pFanin->Value )
+            pFanin->Value = Gia_ManAppendCi(pNew);
+    }
+    // create flop outputs
+    Gia_ManForEachRo( p, pObj, i )
+        pObj->Value = Gia_ManAppendCi(pNew);
+    // create internal nodes
+    Gia_ManForEachCo( p, pObj, i )
+        Gia_ManDupOrderDfs_rec( pNew, p, pObj );
+    Gia_ManSetRegNum( pNew, Gia_ManRegNum(p) );
+    Gia_ManCleanMark0( p );
     return pNew;
 }
 

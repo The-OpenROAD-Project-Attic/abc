@@ -1091,6 +1091,34 @@ int Gia_ManFromIfLogicNode( void * pIfMan, Gia_Man_t * pNew, int iObj, Vec_Int_t
         }
         return Gia_ManFromIfLogicCreateLutSpecial( pNew, pRes, vLeaves, vLeavesTemp, vCover, vMapping, vMapping2, vPacking );
     }
+    if ( ((If_Man_t *)pIfMan)->pPars->fLut6Filter && Vec_IntSize(vLeaves) == 6 )
+    {
+        extern word If_Dec6Perform( word t, int fDerive );
+        extern void If_Dec6Verify( word t, word z );
+        Vec_Int_t * vLeaves2 = Vec_IntAlloc( 4 );
+        word t = pRes[0];
+        word z = If_Dec6Perform( t, 1 );
+        //If_DecPrintConfig( z );
+        If_Dec6Verify( t, z );
+
+        t = Abc_Tt6Stretch( z & 0xffff, 4 );
+        Vec_IntClear( vLeaves2 );
+        for ( i = 0; i < 4; i++ )
+            Vec_IntPush( vLeaves2, Vec_IntEntry( vLeaves, (int)((z >> (16+i*4)) & 7) ) );
+        iObjLit1 = Gia_ManFromIfLogicCreateLut( pNew, &t, vLeaves2, vCover, vMapping, vMapping2 );
+
+        t = Abc_Tt6Stretch( (z >> 32) & 0xffff, 4 );
+        Vec_IntClear( vLeaves2 );
+        for ( i = 0; i < 4; i++ )
+            if ( ((z >> (48+i*4)) & 7) == 7 )
+                Vec_IntPush( vLeaves2, iObjLit1 );
+            else
+                Vec_IntPush( vLeaves2, Vec_IntEntry( vLeaves, (int)((z >> (48+i*4)) & 7) ) );
+        iObjLit1 = Gia_ManFromIfLogicCreateLut( pNew, &t, vLeaves2, vCover, vMapping, vMapping2 );
+
+        Vec_IntFree( vLeaves2 );
+        return iObjLit1;
+    }
     // check if there is no LUT structures
     if ( pStr == NULL )
         return Gia_ManFromIfLogicCreateLut( pNew, pRes, vLeaves, vCover, vMapping, vMapping2 );
@@ -2331,6 +2359,13 @@ Gia_Man_t * Gia_ManPerformMappingInt( Gia_Man_t * p, If_Par_t * pPars )
     pNew->pName = Abc_UtilStrsav( p->pName );
     pNew->pSpec = Abc_UtilStrsav( p->pSpec );
     Gia_ManSetRegNum( pNew, Gia_ManRegNum(p) );
+    // print delay trace
+    if ( pPars->fVerboseTrace )
+    {
+        pNew->pLutLib = pPars->pLutLib;
+        Gia_ManDelayTraceLutPrint( pNew, 1 );
+        pNew->pLutLib = NULL;
+    }
     return pNew;
 }
 Gia_Man_t * Gia_ManPerformMapping( Gia_Man_t * p, void * pp )

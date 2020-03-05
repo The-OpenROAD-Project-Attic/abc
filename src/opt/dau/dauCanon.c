@@ -302,7 +302,7 @@ void Abc_TtNormalizeSmallTruth(word * pTruth, int nVars)
     }
 }
 
-inline void Abc_TtVerifySmallTruth(word * pTruth, int nVars)
+static inline void Abc_TtVerifySmallTruth(word * pTruth, int nVars)
 {
 #ifndef NDEBUG
     if (nVars < 6) {
@@ -369,7 +369,7 @@ int Abc_TtCountOnesInCofsSimple( word * pTruth, int nVars, int * pStore )
 }
 
 // Shifted Cofactor Coefficient
-inline int shiftFunc(int ci)
+static inline int shiftFunc(int ci)
 //{ return ci * ci; }
 { return 1 << ci; }
 
