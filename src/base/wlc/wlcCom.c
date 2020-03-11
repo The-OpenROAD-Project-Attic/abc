@@ -1037,7 +1037,7 @@ int Abc_CommandBlast( Abc_Frame_t * pAbc, int argc, char ** argv )
     Wlc_BstParDefault( pPar );
     pPar->nOutputRange = 2;
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "ORAMcombadestnizvh" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "ORAMcombqadestnizvh" ) ) != EOF )
     {
         switch ( c )
         {
@@ -1096,6 +1096,9 @@ int Abc_CommandBlast( Abc_Frame_t * pAbc, int argc, char ** argv )
             break;
         case 'b':
             pPar->fBooth ^= 1;
+            break;
+        case 'q':
+            pPar->fNonRest ^= 1;
             break;
         case 'a':
             pPar->fCla ^= 1;
@@ -1195,7 +1198,7 @@ int Abc_CommandBlast( Abc_Frame_t * pAbc, int argc, char ** argv )
     Abc_FrameUpdateGia( pAbc, pNew );
     return 0;
 usage:
-    Abc_Print( -2, "usage: %%blast [-ORAM num] [-combadestnizvh]\n" );
+    Abc_Print( -2, "usage: %%blast [-ORAM num] [-combqadestnizvh]\n" );
     Abc_Print( -2, "\t         performs bit-blasting of the word-level design\n" );
     Abc_Print( -2, "\t-O num : zero-based index of the first word-level PO to bit-blast [default = %d]\n", pPar->iOutput );
     Abc_Print( -2, "\t-R num : the total number of word-level POs to bit-blast [default = %d]\n",          pPar->nOutputRange );
@@ -1205,6 +1208,7 @@ usage:
     Abc_Print( -2, "\t-o     : toggle using additional POs on the word-level boundaries [default = %s]\n", pPar->fAddOutputs? "yes": "no" );
     Abc_Print( -2, "\t-m     : toggle creating boxes for all multipliers in the design [default = %s]\n",  pPar->fMulti? "yes": "no" );
     Abc_Print( -2, "\t-b     : toggle generating radix-4 Booth multipliers [default = %s]\n",              pPar->fBooth? "yes": "no" );
+    Abc_Print( -2, "\t-q     : toggle generating non-restoring square root [default = %s]\n",              pPar->fNonRest? "yes": "no" );
     Abc_Print( -2, "\t-a     : toggle generating carry-look-ahead adder [default = %s]\n",                 pPar->fCla? "yes": "no" );
     Abc_Print( -2, "\t-d     : toggle creating dual-output multi-output miter [default = %s]\n",           pPar->fCreateMiter? "yes": "no" );
     Abc_Print( -2, "\t-e     : toggle creating miter with output word bits combined [default = %s]\n",     pPar->fCreateWordMiter? "yes": "no" );
@@ -1323,15 +1327,19 @@ usage:
 ******************************************************************************/
 int Abc_CommandRetime( Abc_Frame_t * pAbc, int argc, char ** argv )
 {
-    extern void Wln_NtkRetimeTest( char * pFileName, int fVerbose );
+    extern void Wln_NtkRetimeTest( char * pFileName, int fSkipSimple, int fVerbose );
     FILE * pFile;
     char * pFileName = NULL;
+    int fSkipSimple  = 0;
     int c, fVerbose  = 0;
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "vh" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "svh" ) ) != EOF )
     {
         switch ( c )
         {
+        case 's':
+            fSkipSimple ^= 1;
+            break;
         case 'v':
             fVerbose ^= 1;
             break;
@@ -1351,7 +1359,7 @@ int Abc_CommandRetime( Abc_Frame_t * pAbc, int argc, char ** argv )
             printf( "Transforming NDR into internal represnetation has failed.\n" );
             return 0;
         }
-        vMoves = Wln_NtkRetime( pNtk, fVerbose );
+        vMoves = Wln_NtkRetime( pNtk, fSkipSimple, fVerbose );
         Wln_NtkFree( pNtk );
         ABC_FREE( pAbc->pNdrArray );
         if ( vMoves ) pAbc->pNdrArray = Vec_IntReleaseNewArray( vMoves );
@@ -1374,11 +1382,12 @@ int Abc_CommandRetime( Abc_Frame_t * pAbc, int argc, char ** argv )
         return 0;
     }
     fclose( pFile );
-    Wln_NtkRetimeTest( pFileName, fVerbose );
+    Wln_NtkRetimeTest( pFileName, fSkipSimple, fVerbose );
     return 0;
 usage:
-    Abc_Print( -2, "usage: %%retime [-vh]\n" );
+    Abc_Print( -2, "usage: %%retime [-svh]\n" );
     Abc_Print( -2, "\t         performs retiming for the NDR design\n" );
+    Abc_Print( -2, "\t-s     : toggle printing simple nodes [default = %s]\n", !fSkipSimple? "yes": "no" );
     Abc_Print( -2, "\t-v     : toggle printing verbose information [default = %s]\n", fVerbose? "yes": "no" );
     Abc_Print( -2, "\t-h     : print the command usage\n");
     return 1;

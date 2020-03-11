@@ -49,6 +49,62 @@ ABC_NAMESPACE_IMPL_START
   SeeAlso     []
 
 ***********************************************************************/
+void Gia_DeriveFormula_rec( Gia_Man_t * pGia, char ** ppNamesIn, Vec_Str_t * vStr, int iLit )
+{
+    Gia_Obj_t * pObj = Gia_ManObj( pGia, Abc_Lit2Var(iLit) );
+    int fCompl = Abc_LitIsCompl(iLit);
+    if ( Gia_ObjIsAnd(pObj) )
+    {
+        Vec_StrPush( vStr, '(' );
+        if ( Gia_ObjIsMux(pGia, pObj) )
+        {
+            Gia_DeriveFormula_rec( pGia, ppNamesIn, vStr, Gia_ObjFaninLit0p(pGia, pObj) );
+            Vec_StrPush( vStr, '?' );
+            Gia_DeriveFormula_rec( pGia, ppNamesIn, vStr, Abc_LitNotCond( Gia_ObjFaninLit1p(pGia, pObj), fCompl ) );
+            Vec_StrPush( vStr, ':' );
+            Gia_DeriveFormula_rec( pGia, ppNamesIn, vStr, Abc_LitNotCond( Gia_ObjFaninLit2p(pGia, pObj), fCompl ) );
+        }
+        else
+        {
+            Gia_DeriveFormula_rec( pGia, ppNamesIn, vStr, Abc_LitNotCond( Gia_ObjFaninLit0p(pGia, pObj), fCompl ) );
+            Vec_StrPush( vStr, (char)(Gia_ObjIsXor(pObj) ? '^' : (char)(fCompl ? '|' : '&')) );
+            Gia_DeriveFormula_rec( pGia, ppNamesIn, vStr, Abc_LitNotCond( Gia_ObjFaninLit1p(pGia, pObj), fCompl ) );
+        }
+        Vec_StrPush( vStr, ')' );
+    }
+    else
+    {
+        if ( fCompl ) Vec_StrPush( vStr, '~' );
+        Vec_StrPrintF( vStr, "%s", ppNamesIn[Gia_ObjCioId(pObj)] );
+    }
+}
+char * Gia_DeriveFormula( Gia_Man_t * pGia, char ** ppNamesIn )
+{
+    char * pResult;
+    Vec_Str_t * vStr   = Vec_StrAlloc( 1000 );
+    Gia_Man_t * pMuxes = Gia_ManDupMuxes( pGia, 2 );
+    Gia_Obj_t * pObj   = Gia_ManCo( pGia, 0 );
+    Vec_StrPush( vStr, '(' );
+    Gia_DeriveFormula_rec( pGia, ppNamesIn, vStr, Gia_ObjFaninLit0p(pGia, pObj) );
+    Vec_StrPush( vStr, ')' );
+    Vec_StrPush( vStr, '\0' );
+    Gia_ManStop( pMuxes );
+    pResult = Vec_StrReleaseArray( vStr );
+    Vec_StrFree( vStr );
+    return pResult;
+}
+
+/**Function*************************************************************
+
+  Synopsis    [This procedure sets default parameters.]
+
+  Description []
+               
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
 void Gia_ParFfSetDefault( Bmc_ParFf_t * p )
 {
     memset( p, 0, sizeof(Bmc_ParFf_t) );
@@ -593,8 +649,8 @@ int Gia_FormStrCount( char * pStr, int * pnVars, int * pnPars )
     }
     if ( *pnVars != FFTEST_MAX_VARS )
         { printf( "The number of input variables (%d) should be 2\n", *pnVars ); return 1; }
-    if ( *pnPars < 1 && *pnPars > FFTEST_MAX_PARS )
-        { printf( "The number of parameters should be between 1 and %d\n", *pnPars ); return 1; }
+    if ( *pnPars < 1 || *pnPars > FFTEST_MAX_PARS )
+        { printf( "The number of parameters should be between 1 and %d\n", FFTEST_MAX_PARS ); return 1; }
     return 0;
 }
 void Gia_FormStrTransform( char * pStr, char * pForm )
@@ -614,10 +670,9 @@ void Gia_FormStrTransform( char * pStr, char * pForm )
     pStr[k] = 0; 
 }   
 
-
 /**Function*************************************************************
 
-  Synopsis    [Implements fault model formula using functional/parameter vars.]
+  Synopsis    [Print formula.]
 
   Description []
                
@@ -643,6 +698,88 @@ char * Gia_ManFormulaEndToken( char * pForm )
     assert( 0 );
     return NULL;
 }
+void Gia_ManPrintFormula_rec( char * pBeg, char * pEnd )
+{
+    int Oper = -1;
+    char * pEndNew;
+    if ( pBeg + 1 == pEnd )
+    {
+        if ( pBeg[0] >= 'a' && pBeg[0] <= 'b' )
+            printf( "%c", pBeg[0] );
+        else if ( pBeg[0] >= 'A' && pBeg[0] <= 'B' )
+            printf( "~%c", pBeg[0]-'A'+'a' );
+        else if ( pBeg[0] >= 'p' && pBeg[0] <= 'w' ) // pqrstuvw
+            printf( "%c", pBeg[0] );
+        else if ( pBeg[0] >= 'P' && pBeg[0] <= 'W' )
+            printf( "~%c", pBeg[0]-'A'+'a' );
+        return;
+    }
+    if ( pBeg[0] == '(' )
+    {
+        pEndNew = Gia_ManFormulaEndToken( pBeg );
+        if ( pEndNew == pEnd )
+        {
+            assert( pBeg[0] == '(' );
+            assert( pBeg[pEnd-pBeg-1] == ')' );
+            Gia_ManPrintFormula_rec( pBeg + 1, pEnd - 1 );
+            return;
+        }
+    }
+    // get first part
+    pEndNew  = Gia_ManFormulaEndToken( pBeg );
+    printf( "(" );
+    Gia_ManPrintFormula_rec( pBeg, pEndNew );
+    printf( ")" );
+    Oper     = pEndNew[0];
+    // derive the formula
+    if ( Oper == '&' )
+        printf( "&" );
+    else if ( Oper == '|' )
+        printf( "|" );
+    else if ( Oper == '^' )
+        printf( "^" );
+    else if ( Oper == '?' )
+        printf( "?" );
+    else assert( 0 );
+    // get second part
+    pBeg     = pEndNew + 1;
+    pEndNew  = Gia_ManFormulaEndToken( pBeg );
+    printf( "(" );
+    Gia_ManPrintFormula_rec( pBeg, pEndNew );
+    printf( ")" );
+    if ( Oper == '?' )
+    {
+        printf( ":" );
+        // get third part
+        assert( Oper == '?' );
+        assert( pEndNew[0] == ':' );
+        pBeg     = pEndNew + 1;
+        pEndNew  = Gia_ManFormulaEndToken( pBeg );
+        printf( "(" );
+        Gia_ManPrintFormula_rec( pBeg, pEndNew );
+        printf( ")" );
+    }
+}
+void Gia_ManPrintFormula( char * pStr )
+{
+    printf( "Using formula: " );
+    printf( "(" );
+    Gia_ManPrintFormula_rec( pStr, pStr + strlen(pStr) );
+    printf( ")" );
+    printf( "\n" );
+}
+
+/**Function*************************************************************
+
+  Synopsis    [Implements fault model formula using functional/parameter vars.]
+
+  Description []
+               
+  SideEffects []
+
+  SeeAlso     []
+
+***********************************************************************/
 int Gia_ManRealizeFormula_rec( Gia_Man_t * p, int * pVars, int * pPars, char * pBeg, char * pEnd, int nPars )
 {
     int iFans[3], Oper = -1;
@@ -709,6 +846,7 @@ Gia_Man_t * Gia_ManFormulaUnfold( Gia_Man_t * p, char * pForm, int fFfOnly )
     Gia_FormStrCount( pForm, &nVars, &nPars );
     assert( nVars == 2 );
     Gia_FormStrTransform( pStr, pForm );
+    Gia_ManPrintFormula( pStr );
     pNew = Gia_ManStart( 5 * Gia_ManObjNum(p) );
     pNew->pName = Abc_UtilStrsav( p->pName );
     Gia_ManHashAlloc( pNew );
