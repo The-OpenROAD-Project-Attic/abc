@@ -139,6 +139,10 @@ ifneq ($(OS), FreeBSD)
   LIBS += -ldl
 endif
 
+ifdef TCL_INCLUDE
+   CFLAGS += -I$(TCL_INCLUDE)
+endif
+
 ifneq ($(findstring Darwin, $(shell uname)), Darwin)
    LIBS += -lrt
 endif
