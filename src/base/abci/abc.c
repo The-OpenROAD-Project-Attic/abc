@@ -104,6 +104,7 @@ static int Abc_CommandShow                   ( Abc_Frame_t * pAbc, int argc, cha
 static int Abc_CommandShowBdd                ( Abc_Frame_t * pAbc, int argc, char ** argv );
 static int Abc_CommandShowCut                ( Abc_Frame_t * pAbc, int argc, char ** argv );
 
+static int Abc_CommandDRiLLS                 ( Abc_Frame_t * pAbc, int argc, char ** argv );
 static int Abc_CommandCollapse               ( Abc_Frame_t * pAbc, int argc, char ** argv );
 static int Abc_CommandSatClp                 ( Abc_Frame_t * pAbc, int argc, char ** argv );
 static int Abc_CommandStrash                 ( Abc_Frame_t * pAbc, int argc, char ** argv );
@@ -938,6 +939,7 @@ void Abc_Init( Abc_Frame_t * pAbc )
     Cmd_CommandAdd( pAbc, "Various",      "minisat",       Abc_CommandMinisat,          0 );
     Cmd_CommandAdd( pAbc, "Various",      "minisimp",      Abc_CommandMinisimp,         0 );
 
+    Cmd_CommandAdd( pAbc, "New AIG",      "drills",        Abc_CommandDRiLLS,          1 );
     Cmd_CommandAdd( pAbc, "New AIG",      "istrash",       Abc_CommandIStrash,          1 );
     Cmd_CommandAdd( pAbc, "New AIG",      "icut",          Abc_CommandICut,             0 );
     Cmd_CommandAdd( pAbc, "New AIG",      "irw",           Abc_CommandIRewrite,         1 );
@@ -14055,6 +14057,67 @@ usage:
     Abc_Print( -2, "\t         constraint should be represented as the last PO\n" );
     Abc_Print( -2, "\t-C num : the max number of conflicts at a node [default = %d]\n", nConfLim );
     Abc_Print( -2, "\t-v     : toggle printing verbose information [default = %s]\n", fVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-h     : print the command usage\n");
+    return 1;
+}
+
+/**Function*************************************************************
+  Synopsis    []
+  Description []
+  SideEffects []
+  SeeAlso     []
+***********************************************************************/
+int Abc_CommandDRiLLS( Abc_Frame_t * pAbc, int argc, char ** argv )
+{
+    Abc_Ntk_t * pNtk, * pNtkRes, * pNtkTemp;
+    int c;
+    extern Abc_Ntk_t * Abc_NtkIvyDRiLLS( Abc_Ntk_t * pNtk );
+
+    pNtk = Abc_FrameReadNtk(pAbc);
+    // set defaults
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "h" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+    if ( pNtk == NULL )
+    {
+        Abc_Print( -1, "Empty network.\n" );
+        return 1;
+    }
+    if ( !Abc_NtkIsStrash(pNtk) )
+    {
+        pNtkTemp = Abc_NtkStrash( pNtk, 0, 1, 0 );
+        pNtkRes = Abc_NtkIvyDRiLLS( pNtkTemp );
+        Abc_NtkDelete( pNtkTemp );
+    }
+    else
+        pNtkRes = Abc_NtkIvyDRiLLS( pNtk );
+
+    printf("Running DRiLLS ..\n");
+
+    // TODO: write_aig to a temp file
+    // TODO: call a Python script with this AIG - get optimization
+    // TODO: switch optimization and execute accordingly
+
+    if ( pNtkRes == NULL )
+    {
+        Abc_Print( -1, "Command has failed.\n" );
+        return 0;
+    }
+    // replace the current network
+    Abc_FrameReplaceCurrentNetwork( pAbc, pNtkRes );
+    return 0;
+
+usage:
+    Abc_Print( -2, "usage: drills [-h]\n" );
+    Abc_Print( -2, "\t         perform AIG optimization using an RL model\n" );
     Abc_Print( -2, "\t-h     : print the command usage\n");
     return 1;
 }

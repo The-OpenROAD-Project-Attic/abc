@@ -223,7 +223,7 @@ void Io_NtkWriteOne( FILE * pFile, Abc_Ntk_t * pNtk, int fWriteLatches, int fBb2
     }
 
     // write the timing info
-    Io_WriteTimingInfo( pFile, pNtk );
+    // Io_WriteTimingInfo( pFile, pNtk );
 
     // write the latches
     if ( fWriteLatches && !Abc_NtkIsComb(pNtk) )

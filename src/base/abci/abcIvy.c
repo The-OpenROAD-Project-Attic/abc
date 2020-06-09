@@ -163,6 +163,26 @@ Abc_Ntk_t * Abc_NtkIvyAfter( Abc_Ntk_t * pNtk, Ivy_Man_t * pMan, int fSeq, int f
 }
 
 /**Function*************************************************************
+  Synopsis    [Gives the current ABC network to AIG manager for processing.]
+  Description []
+               
+  SideEffects []
+  SeeAlso     []
+***********************************************************************/
+Abc_Ntk_t * Abc_NtkIvyDRiLLS( Abc_Ntk_t * pNtk )
+{
+    Abc_Ntk_t * pNtkAig;
+    Ivy_Man_t * pMan;
+    pMan = Abc_NtkIvyBefore( pNtk, 1, 0 );
+    if ( pMan == NULL )
+        return NULL;
+    pNtkAig = Abc_NtkIvyAfter( pNtk, pMan, 1, 0 );
+    Ivy_ManStop( pMan );
+    return pNtkAig;
+}
+
+
+/**Function*************************************************************
 
   Synopsis    [Gives the current ABC network to AIG manager for processing.]
 
