@@ -14100,9 +14100,11 @@ int Abc_CommandDRiLLS( Abc_Frame_t * pAbc, int argc, char ** argv )
     else
         pNtkRes = Abc_NtkIvyDRiLLS( pNtk );
 
-    printf("Running DRiLLS ..\n");
+    Abc_Print( -2, "Running DRiLLS ..\n" );
 
-    // TODO: write_aig to a temp file
+    char* pFileName = ".drills.blif";
+    Io_Write( pAbc->pNtkCur, pFileName, IO_FILE_BLIF );
+        
     // TODO: call a Python script with this AIG - get optimization
     // TODO: switch optimization and execute accordingly
 
