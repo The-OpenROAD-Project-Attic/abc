@@ -14075,11 +14075,31 @@ int Abc_CommandDRiLLS( Abc_Frame_t * pAbc, int argc, char ** argv )
 
     pNtk = Abc_FrameReadNtk(pAbc);
     // set defaults
+    char library[128] = "\0";
+    char model[128] = "\0";
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "h" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "hlm" ) ) != EOF )
     {
         switch ( c )
         {
+        case 'l':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-l\" should be followed by the library path.\n" );
+                goto usage;
+            }
+            strcpy(library, argv[globalUtilOptind]);
+            globalUtilOptind++;
+            break;
+        case 'm':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-m\" should be followed by the PyTorch model path.\n" );
+                goto usage;
+            }
+            strcpy(model, argv[globalUtilOptind]);
+            globalUtilOptind++;
+            break;
         case 'h':
             goto usage;
         default:
@@ -14102,11 +14122,36 @@ int Abc_CommandDRiLLS( Abc_Frame_t * pAbc, int argc, char ** argv )
 
     Abc_Print( -2, "Running DRiLLS ..\n" );
 
-    char* pFileName = ".drills.blif";
+    char* pFileName = ".drillsin.blif";
     Io_Write( pAbc->pNtkCur, pFileName, IO_FILE_BLIF );
         
-    // TODO: call a Python script with this AIG - get optimization
-    // TODO: switch optimization and execute accordingly
+    // Call DRiLLS
+    if(strlen(library) == 0) {
+        Abc_Print( -1, "Missing liberty file. Use '-l' switch\n" );
+        return 1;
+    }
+    if(strlen(model) == 0) {
+        Abc_Print( -1, "Missing DRiLLS model file. Use '-m' switch\n" );
+        return 1;
+    }
+    char command[128] = "drills.py --design .drills.blif";
+    strcat(command, " --library ");
+    strcat(command, library);
+    strcat(command, " --model ");
+    strcat(command, model);
+    strcat(command, "\0");
+    
+    printf("%s", command);
+    int status = system(command);
+    if (status != 0) {
+        Abc_Print( -1, "Failed to run DRiLLS! Skipping ..\n" );
+        return 1;
+    }
+    
+    // TODO: clear network and read the new one
+    Abc_FrameDeleteAllNetworks( pAbc );
+    // Abc_FrameRestart( pAbc );
+
 
     if ( pNtkRes == NULL )
     {
@@ -14119,8 +14164,10 @@ int Abc_CommandDRiLLS( Abc_Frame_t * pAbc, int argc, char ** argv )
 
 usage:
     Abc_Print( -2, "usage: drills [-h]\n" );
-    Abc_Print( -2, "\t         perform AIG optimization using an RL model\n" );
-    Abc_Print( -2, "\t-h     : print the command usage\n");
+    Abc_Print( -2, "\t          perform AIG optimization using an RL model\n" );
+    Abc_Print( -2, "\t-l path : full path to the liberty file\n");
+    Abc_Print( -2, "\t-m path : full path to the PyTorch model file\n");
+    Abc_Print( -2, "\t-h      : print the command usage\n");
     return 1;
 }
 
