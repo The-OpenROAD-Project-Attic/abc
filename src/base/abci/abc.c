@@ -14141,17 +14141,17 @@ int Abc_CommandDRiLLS( Abc_Frame_t * pAbc, int argc, char ** argv )
     strcat(command, model);
     strcat(command, "\0");
     
-    printf("%s", command);
     int status = system(command);
     if (status != 0) {
         Abc_Print( -1, "Failed to run DRiLLS! Skipping ..\n" );
         return 1;
     }
     
-    // TODO: clear network and read the new one
+    // Clear network and read the new one from drills
     Abc_FrameDeleteAllNetworks( pAbc );
-    // Abc_FrameRestart( pAbc );
-
+    Abc_FrameRestart( pAbc );
+    char* resultFileName = ".drillsin.blif.drillsout.blif";
+    pNtkRes = Io_Read(resultFileName, IO_FILE_BLIF, 0, 0 );
 
     if ( pNtkRes == NULL )
     {
