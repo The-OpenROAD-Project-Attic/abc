@@ -14122,7 +14122,7 @@ int Abc_CommandDRiLLS( Abc_Frame_t * pAbc, int argc, char ** argv )
 
     Abc_Print( -2, "Running DRiLLS ..\n" );
 
-    char* pFileName = ".drillsin.blif";
+    char* pFileName = ".drills.in.blif";
     Io_Write( pAbc->pNtkCur, pFileName, IO_FILE_BLIF );
         
     // Call DRiLLS
@@ -14134,12 +14134,12 @@ int Abc_CommandDRiLLS( Abc_Frame_t * pAbc, int argc, char ** argv )
         Abc_Print( -1, "Missing DRiLLS model file. Use '-m' switch\n" );
         return 1;
     }
-    char command[128] = "drills.py --design .drills.blif";
+    char command[128] = "drills.py --design .drills.in.blif";
     strcat(command, " --library ");
     strcat(command, library);
     strcat(command, " --model ");
     strcat(command, model);
-    strcat(command, "\0");
+    strcat(command, " optimize\0");
     
     int status = system(command);
     if (status != 0) {
@@ -14150,7 +14150,7 @@ int Abc_CommandDRiLLS( Abc_Frame_t * pAbc, int argc, char ** argv )
     // Clear network and read the new one from drills
     Abc_FrameDeleteAllNetworks( pAbc );
     Abc_FrameRestart( pAbc );
-    char* resultFileName = ".drillsin.blif.drillsout.blif";
+    char* resultFileName = ".drills.in.blif.drills.out.blif";
     pNtkRes = Io_Read(resultFileName, IO_FILE_BLIF, 0, 0 );
 
     if ( pNtkRes == NULL )
